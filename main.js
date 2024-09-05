@@ -38,6 +38,14 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var PaymentEventsGenerator_1 = require("./PaymentEventsGenerator");
 var PaymentNotificationService_1 = require("./PaymentNotificationService");
+var PAYMENT_STATUS;
+(function (PAYMENT_STATUS) {
+    PAYMENT_STATUS["PROCESSING"] = "processing";
+    PAYMENT_STATUS["SUCCESS"] = "success";
+    PAYMENT_STATUS["AUTHORIZED"] = "authorized";
+    PAYMENT_STATUS["DECLINED"] = "declined";
+    PAYMENT_STATUS["UNKNOWN_STATUS"] = "unknown_status";
+})(PAYMENT_STATUS || (PAYMENT_STATUS = {}));
 var main = function () { return __awaiter(void 0, void 0, void 0, function () {
     var paymentEventsGenerator, notificationService, paymentEvents, processEvent, updateStatus, paymentRecords;
     return __generator(this, function (_a) {
@@ -50,53 +58,72 @@ var main = function () { return __awaiter(void 0, void 0, void 0, function () {
                     var paymentId = _a.paymentId, eventName = _a.eventName;
                     var paymentRecord = paymentEvents.get(paymentId);
                     if (!paymentRecord) {
-                        paymentRecord = { paymentId: paymentId, status: null };
+                        paymentRecord = {
+                            paymentId: paymentId,
+                            status: null,
+                            isAuthorized: false,
+                            isSuccessfull: false,
+                        };
                         paymentEvents.set(paymentId, paymentRecord);
                     }
                     var currStatus = paymentRecord.status;
                     switch (eventName) {
-                        case 'authorized':
-                            if (currStatus === 'success')
-                                break;
-                            updateStatus(paymentRecord, 'authorized');
+                        case PAYMENT_STATUS.AUTHORIZED:
+                            updateStatus(paymentRecord, PAYMENT_STATUS.AUTHORIZED);
                             break;
-                        case 'success':
-                            if (currStatus === 'declined')
-                                break;
-                            if (currStatus === 'authorized') {
-                                updateStatus(paymentRecord, 'success');
-                            }
-                            else {
-                                updateStatus(paymentRecord, 'authorized');
-                                processEvent({ paymentId: paymentId, eventName: 'success' });
+                        case PAYMENT_STATUS.SUCCESS:
+                            updateStatus(paymentRecord, PAYMENT_STATUS.SUCCESS);
+                            break;
+                        case PAYMENT_STATUS.PROCESSING:
+                            if (currStatus === null ||
+                                currStatus === PAYMENT_STATUS.UNKNOWN_STATUS) {
+                                updateStatus(paymentRecord, PAYMENT_STATUS.PROCESSING);
                             }
                             break;
-                        case 'processing':
-                            if (currStatus === null || currStatus === 'unknown_status') {
-                                updateStatus(paymentRecord, 'processing');
-                            }
-                            break;
-                        case 'declined':
-                            updateStatus(paymentRecord, 'declined');
+                        case PAYMENT_STATUS.DECLINED:
+                            updateStatus(paymentRecord, PAYMENT_STATUS.DECLINED);
                             break;
                         default:
-                            updateStatus(paymentRecord, 'unknown_status');
+                            updateStatus(paymentRecord, PAYMENT_STATUS.UNKNOWN_STATUS);
                             break;
                     }
                 };
                 updateStatus = function (paymentRecord, newStatus) {
                     var currStatus = paymentRecord.status;
-                    if (currStatus === 'declined' || currStatus === 'success') {
+                    if (currStatus === PAYMENT_STATUS.DECLINED ||
+                        currStatus === PAYMENT_STATUS.SUCCESS) {
                         // 9
-                        if (newStatus !== 'declined' && newStatus !== 'success')
+                        if (newStatus !== PAYMENT_STATUS.DECLINED &&
+                            newStatus !== PAYMENT_STATUS.SUCCESS)
                             return;
                     }
+                    // 2
+                    if (newStatus === PAYMENT_STATUS.AUTHORIZED) {
+                        paymentRecord.isAuthorized = true;
+                    }
+                    if (newStatus === PAYMENT_STATUS.SUCCESS) {
+                        paymentRecord.isSuccessfull = true;
+                    }
+                    if (paymentRecord.status === null && newStatus === PAYMENT_STATUS.SUCCESS) {
+                        newStatus = PAYMENT_STATUS.UNKNOWN_STATUS;
+                    }
+                    if (paymentRecord.isAuthorized &&
+                        paymentRecord.isSuccessfull &&
+                        newStatus !== PAYMENT_STATUS.DECLINED) {
+                        newStatus = PAYMENT_STATUS.SUCCESS;
+                    }
                     // 11
-                    if (newStatus === 'unknown_status' && currStatus !== null)
+                    if (newStatus === PAYMENT_STATUS.UNKNOWN_STATUS && currStatus !== null)
                         return;
                     paymentRecord.status = newStatus;
                     // 7
-                    if (newStatus === 'success' || newStatus === 'declined') {
+                    if (newStatus === PAYMENT_STATUS.SUCCESS ||
+                        newStatus === PAYMENT_STATUS.DECLINED) {
+                        // 8
+                        if (paymentRecord.status === PAYMENT_STATUS.SUCCESS ||
+                            paymentRecord.status === PAYMENT_STATUS.DECLINED) {
+                            paymentRecord.status = newStatus;
+                        }
                         notificationService.sendNotification(paymentRecord.paymentId, newStatus);
                     }
                 };
@@ -109,7 +136,9 @@ var main = function () { return __awaiter(void 0, void 0, void 0, function () {
                 ];
             case 1:
                 _a.sent();
-                paymentRecords = Array.from(paymentEvents.values());
+                paymentRecords = Array.from(paymentEvents.values()).map(function (record) {
+                    return { paymentId: record.paymentId, status: record.status };
+                });
                 console.log('final', paymentRecords);
                 return [2 /*return*/];
         }

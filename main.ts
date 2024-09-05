@@ -4,6 +4,9 @@ import { PaymentNotificationService } from './PaymentNotificationService'
 interface PaymentRecord {
 	paymentId: string
 	status: PaymentStatus
+}
+
+interface PaymentEvent extends PaymentRecord {
 	isAuthorized: boolean
 	isSuccessfull: boolean
 }
@@ -22,7 +25,7 @@ const main = async () => {
 	/**
 	 * Add handler for 'payment-event' here before starting events generation
 	 */
-	const paymentEvents: Map<string, PaymentRecord> = new Map()
+	const paymentEvents: Map<string, PaymentEvent> = new Map()
 
 	const processEvent = ({ paymentId, eventName }) => {
 		let paymentRecord = paymentEvents.get(paymentId)
@@ -41,17 +44,10 @@ const main = async () => {
 
 		switch (eventName) {
 			case PAYMENT_STATUS.AUTHORIZED:
-				// if (currStatus === PAYMENT_STATUS.SUCCESS) break
 				updateStatus(paymentRecord, PAYMENT_STATUS.AUTHORIZED)
 				break
 			case PAYMENT_STATUS.SUCCESS:
-				if (currStatus === PAYMENT_STATUS.DECLINED) break
-				if (currStatus === PAYMENT_STATUS.AUTHORIZED) {
-					updateStatus(paymentRecord, PAYMENT_STATUS.SUCCESS)
-				} else {
-					updateStatus(paymentRecord, PAYMENT_STATUS.AUTHORIZED)
-					processEvent({ paymentId, eventName: PAYMENT_STATUS.SUCCESS })
-				}
+				updateStatus(paymentRecord, PAYMENT_STATUS.SUCCESS)
 				break
 			case PAYMENT_STATUS.PROCESSING:
 				if (
@@ -71,7 +67,7 @@ const main = async () => {
 	}
 
 	const updateStatus = (
-		paymentRecord: PaymentRecord,
+		paymentRecord: PaymentEvent,
 		newStatus: PaymentStatus,
 	) => {
 		const currStatus = paymentRecord.status
@@ -88,9 +84,25 @@ const main = async () => {
 				return
 		}
 
-		if (newStatus === PAYMENT_STATUS.AUTHORIZED)
+		// 2
+		if (newStatus === PAYMENT_STATUS.AUTHORIZED) {
 			paymentRecord.isAuthorized = true
-		if (newStatus === PAYMENT_STATUS.SUCCESS) paymentRecord.isSuccessfull = true
+		}
+		if (newStatus === PAYMENT_STATUS.SUCCESS) {
+			paymentRecord.isSuccessfull = true
+		}
+
+		if (paymentRecord.status === null && newStatus === PAYMENT_STATUS.SUCCESS) {
+			newStatus = PAYMENT_STATUS.UNKNOWN_STATUS
+		}
+
+		if (
+			paymentRecord.isAuthorized &&
+			paymentRecord.isSuccessfull &&
+			newStatus !== PAYMENT_STATUS.DECLINED
+		) {
+			newStatus = PAYMENT_STATUS.SUCCESS
+		}
 
 		// 11
 		if (newStatus === PAYMENT_STATUS.UNKNOWN_STATUS && currStatus !== null)
@@ -103,6 +115,14 @@ const main = async () => {
 			newStatus === PAYMENT_STATUS.SUCCESS ||
 			newStatus === PAYMENT_STATUS.DECLINED
 		) {
+			// 8
+			if (
+				paymentRecord.status === PAYMENT_STATUS.SUCCESS ||
+				paymentRecord.status === PAYMENT_STATUS.DECLINED
+			) {
+				paymentRecord.status = newStatus
+			}
+
 			notificationService.sendNotification(paymentRecord.paymentId, newStatus)
 		}
 	}
@@ -117,7 +137,9 @@ const main = async () => {
 
 	const paymentRecords: Array<PaymentRecord> = Array.from(
 		paymentEvents.values(),
-	)
+	).map((record) => {
+		return { paymentId: record.paymentId, status: record.status }
+	})
 	console.log('final', paymentRecords)
 }
 
